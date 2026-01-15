@@ -30,7 +30,7 @@ class Board:
 
     def __init__(self):
         """Initialize the board with setup configuration."""
-        self.n = 5
+        self.n = 7
         # Board state: array of tuples (owner, piece_type, orientation)
         # owner: 1 for P1, -1 for P2, 0 for neutral/empty
         self.board = np.empty((self.n, self.n), dtype=object)

@@ -16,12 +16,12 @@ class TestLKIDGame(unittest.TestCase):
     def test_initial_board(self):
         """Test that initial board is created correctly."""
         state = self.game.getInitBoard()
-        self.assertEqual(state.shape[0], 25)
+        self.assertEqual(state.shape[0], 49)
 
     def test_board_size(self):
         """Test board dimensions."""
         size = self.game.getBoardSize()
-        self.assertEqual(size, (5, 5))
+        self.assertEqual(size, (7, 7))
 
     def test_action_size(self):
         """Test action space size."""

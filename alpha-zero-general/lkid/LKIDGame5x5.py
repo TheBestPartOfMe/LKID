@@ -1,12 +1,15 @@
-"""Game class implementation for Lass Die Kirche Im Dorf (LKID).
+"""
+Game class implementation for Lass Die Kirche Im Dorf (LKID).
 
 Board representation:
-- Flattened 7x7 board with piece information encoded
-- Position encoding: x*7 + y (0-48)
+- Flattened 5x5 board with piece information encoded
+- Position encoding: x*5 + y (0-24)
 
 The board state is a numpy array that encodes:
 - Piece presence and ownership for each cell
 - Orientation information for each piece
+
+Change LKIDLogic! -> n = 5
 """
 from __future__ import print_function
 import sys
@@ -22,7 +25,7 @@ import lkid.LKIDGame as lkid_module
 class LKIDGame(Game):
 
     def __init__(self):
-        self.n = 7
+        self.n = 5
         self.board_size = self.n * self.n
         self.action_space_size = self.board_size * self.board_size
 
@@ -42,49 +45,96 @@ class LKIDGame(Game):
 
         # List of (p1_state, p2_state, priest_pos) tuples
         start_positions = [
-            ([ (0, 0, Board.CHURCH_TOWER, Board.VERTICAL),
-                (6, 6, Board.CHURCH_SHIP, Board.VERTICAL),
-                (0, 2, Board.HOUSE, Board.HORIZONTAL),
-                (0, 4, Board.HOUSE, Board.VERTICAL),
-                (0, 6, Board.HOUSE, Board.HORIZONTAL),
-                (2, 0, Board.HOUSE, Board.VERTICAL),
-                (2, 2, Board.HOUSE, Board.HORIZONTAL),
-                (2, 4, Board.HOUSE, Board.VERTICAL),
-                (4, 6, Board.HOUSE, Board.HORIZONTAL),
-            ],
-             [ (6, 0, Board.CHURCH_TOWER, Board.VERTICAL),
-                (0, 6, Board.CHURCH_SHIP, Board.VERTICAL),
-                (6, 2, Board.HOUSE, Board.HORIZONTAL),
-                (6, 4, Board.HOUSE, Board.VERTICAL),
-                (4, 0, Board.HOUSE, Board.HORIZONTAL),
-                (4, 2, Board.HOUSE, Board.VERTICAL),
-                (4, 4, Board.HOUSE, Board.HORIZONTAL),
-                (2, 6, Board.HOUSE, Board.VERTICAL),
-                (2, 0, Board.HOUSE, Board.HORIZONTAL),
-            ],
-             (3, 3)),
+            # --- Standard ---
             ([ (0, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
-                (6, 6, Board.CHURCH_SHIP, Board.HORIZONTAL),
+                (4, 4, Board.CHURCH_SHIP, Board.HORIZONTAL),
+                (1, 1, Board.HOUSE, Board.HORIZONTAL),
+                (3, 1, Board.HOUSE, Board.VERTICAL),
+            ],
+             [ (4, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
+                (0, 4, Board.CHURCH_SHIP, Board.HORIZONTAL),
+                (1, 0, Board.HOUSE, Board.HORIZONTAL),
+                (3, 0, Board.HOUSE, Board.VERTICAL),
+            ],
+             (2, 2)),
+
+            # --- Variant 1 ---
+            ([ (0, 0, Board.CHURCH_TOWER, Board.VERTICAL),
+                (4, 4, Board.CHURCH_SHIP, Board.HORIZONTAL),
                 (1, 3, Board.HOUSE, Board.VERTICAL),
-                (3, 1, Board.HOUSE, Board.HORIZONTAL),
-                (5, 3, Board.HOUSE, Board.VERTICAL),
-                (3, 5, Board.HOUSE, Board.HORIZONTAL),
-                (0, 2, Board.HOUSE, Board.HORIZONTAL),
-                (2, 0, Board.HOUSE, Board.VERTICAL),
-                (4, 6, Board.HOUSE, Board.HORIZONTAL),
+                (3, 3, Board.HOUSE, Board.HORIZONTAL),
             ],
-             [ (6, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
-                (0, 6, Board.CHURCH_SHIP, Board.HORIZONTAL),
-                (1, 5, Board.HOUSE, Board.VERTICAL),
-                (5, 1, Board.HOUSE, Board.HORIZONTAL),
-                (6, 4, Board.HOUSE, Board.HORIZONTAL),
-                (4, 0, Board.HOUSE, Board.VERTICAL),
-                (2, 6, Board.HOUSE, Board.HORIZONTAL),
-                (0, 4, Board.HOUSE, Board.VERTICAL),
-                (4, 2, Board.HOUSE, Board.HORIZONTAL),
+             [ (4, 0, Board.CHURCH_TOWER, Board.VERTICAL),
+                (0, 4, Board.CHURCH_SHIP, Board.HORIZONTAL),
+                (1, 2, Board.HOUSE, Board.HORIZONTAL),
+                (3, 2, Board.HOUSE, Board.VERTICAL),
             ],
-             (3, 3)),
-             
+             (2, 2)),
+
+            # --- Variant 2 ---
+            ([ (0, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
+                (4, 4, Board.CHURCH_SHIP, Board.VERTICAL),
+                (2, 0, Board.HOUSE, Board.HORIZONTAL),
+                (2, 1, Board.HOUSE, Board.VERTICAL),
+            ],
+             [ (4, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
+                (0, 4, Board.CHURCH_SHIP, Board.VERTICAL),
+                (2, 4, Board.HOUSE, Board.HORIZONTAL),
+                (2, 3, Board.HOUSE, Board.VERTICAL),
+            ],
+             (2, 2)),
+
+            # --- Variant 3 ---
+            ([ (0, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
+                (4, 4, Board.CHURCH_SHIP, Board.HORIZONTAL),
+                (0, 2, Board.HOUSE, Board.VERTICAL),
+                (4, 2, Board.HOUSE, Board.VERTICAL),
+            ],
+             [ (4, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
+                (0, 4, Board.CHURCH_SHIP, Board.HORIZONTAL),
+                (2, 0, Board.HOUSE, Board.HORIZONTAL),
+                (2, 4, Board.HOUSE, Board.HORIZONTAL),
+            ],
+             (2, 2)),
+
+            # --- Variant 4 ---
+            ([ (0, 0, Board.CHURCH_TOWER, Board.VERTICAL),
+                (4, 4, Board.CHURCH_SHIP, Board.VERTICAL),
+                (1, 1, Board.HOUSE, Board.HORIZONTAL),
+                (3, 3, Board.HOUSE, Board.VERTICAL),
+            ],
+             [ (4, 0, Board.CHURCH_TOWER, Board.VERTICAL),
+                (0, 4, Board.CHURCH_SHIP, Board.VERTICAL),
+                (1, 3, Board.HOUSE, Board.HORIZONTAL),
+                (3, 1, Board.HOUSE, Board.VERTICAL),
+            ],
+             (2, 2)),
+
+            # --- Variant 5 ---
+            ([ (0, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
+                (4, 4, Board.CHURCH_SHIP, Board.VERTICAL),
+                (0, 1, Board.HOUSE, Board.HORIZONTAL),
+                (4, 3, Board.HOUSE, Board.VERTICAL),
+            ],
+             [ (4, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
+                (0, 4, Board.CHURCH_SHIP, Board.VERTICAL),
+                (1, 4, Board.HOUSE, Board.HORIZONTAL),
+                (3, 0, Board.HOUSE, Board.VERTICAL),
+            ],
+             (2, 2)),
+
+            # --- Variant 6 ---
+            ([ (0, 0, Board.CHURCH_TOWER, Board.VERTICAL),
+                (4, 4, Board.CHURCH_SHIP, Board.HORIZONTAL),
+                (2, 1, Board.HOUSE, Board.HORIZONTAL),
+                (2, 3, Board.HOUSE, Board.VERTICAL),
+            ],
+             [ (4, 0, Board.CHURCH_TOWER, Board.VERTICAL),
+                (0, 4, Board.CHURCH_SHIP, Board.HORIZONTAL),
+                (1, 2, Board.HOUSE, Board.HORIZONTAL),
+                (3, 2, Board.HOUSE, Board.VERTICAL),
+            ],
+             (2, 2)),
         ]
 
         # Randomly select one starting position
@@ -280,10 +330,8 @@ class LKIDGame(Game):
 
     def getSymmetries(self, state, pi):
         assert len(pi) == self.getActionSize()
-        
         l = []
         l.append((state, pi))
-        
         return l
 
     def stringRepresentation(self, state):
