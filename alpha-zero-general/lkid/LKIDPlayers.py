@@ -18,25 +18,6 @@ class RandomPlayer:
         move = np.random.choice(np.where(valids)[0])
         return move
 
-
-class GreedyLKIDPlayer:
-    def __init__(self, game):
-        self.game = game
-
-    def play(self, board):
-        """
-        Return a simple greedy move: prefer moves towards the center 
-        """
-        valids = self.game.getValidMoves(board, 1)
-        candidates = np.where(valids)[0]
-        
-        if len(candidates) == 0:
-            return 0
-
-        best_move = candidates[0]
-        return best_move
-
-
 class HumanLKIDPlayer:
     def __init__(self, game):
         self.game = game
