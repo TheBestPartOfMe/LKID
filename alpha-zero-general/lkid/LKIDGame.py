@@ -60,7 +60,7 @@ class LKIDGame(Game):
                 (4, 2, Board.HOUSE, Board.VERTICAL),
                 (4, 4, Board.HOUSE, Board.HORIZONTAL),
                 (2, 6, Board.HOUSE, Board.VERTICAL),
-                (2, 0, Board.HOUSE, Board.HORIZONTAL),
+                (2, 1, Board.HOUSE, Board.HORIZONTAL),
             ],
              (3, 3)),
             ([ (0, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
