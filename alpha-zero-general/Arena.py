@@ -41,12 +41,15 @@ class Arena():
         curPlayer = 1
         board = self.game.getInitBoard()
         it = 0
+        
+        # Maximum moves per game to prevent infinite games
+        MAX_MOVES = 500
 
         for player in players[0], players[2]:
             if hasattr(player, "startGame"):
                 player.startGame()
 
-        while self.game.getGameEnded(board, curPlayer) == 0:
+        while self.game.getGameEnded(board, curPlayer) == 0 and it < MAX_MOVES:
             it += 1
             if verbose:
                 assert self.display
@@ -106,10 +109,10 @@ class Arena():
 
         for _ in tqdm(range(num), desc="Arena.playGames (2)"):
             gameResult = self.playGame(verbose=verbose)
-            if gameResult == -1:
-                oneWon += 1
-            elif gameResult == 1:
+            if gameResult == 1:
                 twoWon += 1
+            elif gameResult == -1:
+                oneWon += 1
             else:
                 draws += 1
 
