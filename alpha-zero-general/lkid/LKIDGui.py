@@ -21,11 +21,9 @@ sys.modules["keras.api._v2"] = keras_api_v2
 sys.modules["keras.api._v2.keras"] = tf.keras
 
 import os
+import textwrap
 import numpy as np
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QMessageBox, QGridLayout, QTextEdit)
-from PyQt5.QtGui import QPainter, QColor, QFont
-from PyQt5.QtCore import Qt, QTimer
+import pygame
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -39,87 +37,47 @@ from MCTS import MCTS
 from utils import dotdict
 
 
-class LKIDBoardWidget(QWidget):
-    def __init__(self, game, board, selected_piece=None, parent=None):
-        super().__init__(parent)
-        self.game = game
-        self.board = board
-        self.selected_piece = selected_piece
-        self.setMinimumSize(560, 560)
-        self.cell_size = 70
+class UIButton:
+    """Lightweight button helper for pygame UI."""
 
-    def paintEvent(self, event):
-        qp = QPainter(self)
-        qp.setRenderHint(QPainter.Antialiasing)
-        self.draw_board(qp)
+    def __init__(self, rect, text, callback):
+        self.rect = pygame.Rect(rect)
+        self.text = text
+        self.callback = callback
+        self.hover = False
 
-    def draw_board(self, qp):
-        
-        for i in range(8):
-            qp.drawLine(40, 40 + i * self.cell_size, 40 + 7 * self.cell_size, 40 + i * self.cell_size)
-            qp.drawLine(40 + i * self.cell_size, 40, 40 + i * self.cell_size, 40 + 7 * self.cell_size)
-        
-        font = QFont('Arial', 10)
-        qp.setFont(font)
-        for y in range(7):
-            qp.drawText(40 + y * self.cell_size + self.cell_size//2 - 8, 30, str(y))
-        for x in range(7):
-            qp.drawText(20, 40 + x * self.cell_size + self.cell_size//2 + 5, str(x))
-        
-        board_obj = self.game._state_to_board(self.board)
-        for x in range(7):
-            for y in range(7):
-                owner, piece_type, orientation = board_obj._get_piece(x, y)
-                if piece_type != Board.EMPTY:
-                    color = QColor('black')
-                    if owner == 1:
-                        color = QColor('blue')
-                    elif owner == -1:
-                        color = QColor('red')
-                    piece_char = self.get_piece_char(piece_type, owner)
-                    qp.setFont(QFont('Arial', 22, QFont.Bold))
-                    qp.setPen(color)
-                    qp.drawText(40 + y * self.cell_size + self.cell_size//2 - 12,
-                                40 + x * self.cell_size + self.cell_size//2 + 12,
-                                piece_char)
-                    
-                    if piece_type != Board.PRIEST and orientation is not None:
-                        self.draw_orientation_indicator(qp, x, y, orientation, color)
-        
-        if self.selected_piece:
-            x, y = self.selected_piece
-            qp.setPen(QColor('red'))
-            if owner == 1:
-                qp.setPen(QColor('blue'))
-            qp.setBrush(Qt.NoBrush)
-            qp.drawRect(40 + y * self.cell_size, 40 + x * self.cell_size,
-                        self.cell_size, self.cell_size)
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self.hover = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                self.callback()
+                return True
+        return False
 
-    def get_piece_char(self, piece_type, owner):
-        if piece_type == Board.PRIEST:
-            return 'P'
-        elif piece_type == Board.CHURCH_TOWER:
-            return 'T' if owner == 1 else 't'
-        elif piece_type == Board.CHURCH_SHIP:
-            return 'S' if owner == 1 else 's'
-        elif piece_type == Board.HOUSE:
-            return 'H' if owner == 1 else 'h'
-        return '?'
+    def draw(self, surface, font):
+        base_color = (52, 88, 187) if self.hover else (36, 62, 132)
+        pygame.draw.rect(surface, base_color, self.rect, border_radius=6)
+        pygame.draw.rect(surface, (16, 24, 48), self.rect, 2, border_radius=6)
+        label = font.render(self.text, True, (235, 240, 255))
+        label_rect = label.get_rect(center=self.rect.center)
+        surface.blit(label, label_rect)
 
-    def draw_orientation_indicator(self, qp, x, y, orientation, color):
-        center_x = 40 + y * self.cell_size + self.cell_size//2
-        center_y = 40 + x * self.cell_size + self.cell_size//2
-        qp.setPen(color)
-        if orientation == Board.VERTICAL:
-            qp.drawLine(center_x - 15, center_y + 20, center_x + 15, center_y + 20)
-        elif orientation == Board.HORIZONTAL:
-            qp.drawLine(center_x + 20, center_y - 15, center_x + 20, center_y + 15)
 
-class LKIDFrontend(QMainWindow):
+class LKIDPygameFrontend:
     def __init__(self):
-        super().__init__()
-        self.setWindowTitle("LKID - Lass Die Kirche Im Dorf")
-        self.setGeometry(100, 100, 700, 900)
+        pygame.init()
+        pygame.display.set_caption("LKID - Lass Die Kirche Im Dorf")
+
+        self.width = 1100
+        self.height = 780
+        self.screen = pygame.display.set_mode((self.width, self.height))
+        self.clock = pygame.time.Clock()
+
+        self.board_origin = (40, 40)
+        self.cell_size = 70
+        self.board_size = self.cell_size * 7
+
         self.game = LKIDGame()
         self.board = self.game.getInitBoard()
         self.current_player = 1
@@ -127,100 +85,251 @@ class LKIDFrontend(QMainWindow):
         self.game_over = False
         self.ai_player = None
         self.mcts = None
-        self.init_ui()
+        self.pending_ai_move_time = None
 
-    def init_ui(self):
-        central = QWidget()
-        vbox = QVBoxLayout()
-        self.board_widget = LKIDBoardWidget(self.game, self.board)
-        vbox.addWidget(self.board_widget)
-        
-        hbox = QHBoxLayout()
-        self.new_game_btn = QPushButton("New Game")
-        self.new_game_btn.clicked.connect(self.new_game)
-        hbox.addWidget(self.new_game_btn)
-        self.vs_ai_btn = QPushButton("Play vs AI (best)")
-        self.vs_ai_btn.clicked.connect(self.setup_vs_ai)
-        hbox.addWidget(self.vs_ai_btn)
-        self.vs_random_btn = QPushButton("Play vs Random")
-        self.vs_random_btn.clicked.connect(self.setup_vs_random)
-        hbox.addWidget(self.vs_random_btn)
-        self.vs_human_btn = QPushButton("Play vs Human")
-        self.vs_human_btn.clicked.connect(self.setup_vs_human)
-        hbox.addWidget(self.vs_human_btn)
-        vbox.addLayout(hbox)
-        self.status_label = QLabel("Select game mode")
-        vbox.addWidget(self.status_label)
-        self.instructions_label = QLabel(
-            """
-Instructians:\n1. Click 'New Game' to start\n2. Choose 'Play vs Human' or 'Play vs AI'\n3. Click your piece, then destination\n4. Goal: Connect all houses to church\nT/t=Tower, S/s=Ship, H/h=House, P=Priest\nBlue=Player 1, Red=Player 2\n↔ horizontal, ↕ vertical\n"""
+        self.history = []
+        self.max_history = 8
+        self.status_text = "Select game mode"
+
+        self.font_small = pygame.font.SysFont("arial", 18)
+        self.font_medium = pygame.font.SysFont("arial", 22)
+        self.font_large = pygame.font.SysFont("arial", 28, bold=True)
+
+        self.instructions = (
+            "Instructions:\n"
+            "1. Click 'New Game'\n"
+            "2. Pick Human, Random, or AI\n"
+            "3. Click a piece, then a destination\n"
+            "Goal: Connect all houses to the church\n"
+            "T/t=Tower, S/s=Ship, H/h=House, P=Priest\n"
+            "Blue=Player 1, Red=Player 2\n"
+            "- horizontal, | vertical"
         )
-        vbox.addWidget(self.instructions_label)
-        self.history_text = QTextEdit()
-        self.history_text.setReadOnly(True)
-        vbox.addWidget(self.history_text)
-        central.setLayout(vbox)
-        self.setCentralWidget(central)
-        self.board_widget.mousePressEvent = self.on_board_click
-        self.update_board()
 
-    def update_board(self):
-        self.board_widget.board = self.board
-        self.board_widget.selected_piece = self.selected_piece
-        self.board_widget.update()
+        self.buttons = []
+        self._create_buttons()
 
-    def on_board_click(self, event):
+    def _create_buttons(self):
+        panel_x = self.board_origin[0] + self.board_size + 40
+        btn_width = 360
+        btn_height = 48
+        spacing = 16
+        top = 70
+
+        def add_button(label, callback):
+            rect = (panel_x, top + len(self.buttons) * (btn_height + spacing), btn_width, btn_height)
+            self.buttons.append(UIButton(rect, label, callback))
+
+        add_button("New Game", self.new_game)
+        add_button("Play vs Human", self.setup_vs_human)
+        add_button("Play vs Random", self.setup_vs_random)
+        add_button("Play vs AI (best)", self.setup_vs_ai)
+
+    def run(self):
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                    break
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    running = False
+                    break
+                if event.type == pygame.MOUSEMOTION:
+                    for button in self.buttons:
+                        button.handle_event(event)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if any(button.handle_event(event) for button in self.buttons):
+                        continue
+                    self.handle_board_click(event.pos)
+
+            if not running:
+                break
+
+            self.update_ai()
+            self.draw()
+            pygame.display.flip()
+            self.clock.tick(60)
+
+        pygame.quit()
+        sys.exit(0)
+
+    def update_ai(self):
+        if self.pending_ai_move_time is None:
+            return
+        if pygame.time.get_ticks() >= self.pending_ai_move_time:
+            self.pending_ai_move_time = None
+            self.make_ai_move()
+
+    def draw(self):
+        self.screen.fill((12, 16, 30))
+        self._draw_board()
+        self._draw_panel()
+
+    def _draw_board(self):
+        ox, oy = self.board_origin
+        pygame.draw.rect(
+            self.screen, (24, 30, 52), (ox - 10, oy - 10, self.board_size + 20, self.board_size + 20), 0, border_radius=8
+        )
+
+        for i in range(8):
+            start_h = (ox, oy + i * self.cell_size)
+            end_h = (ox + self.board_size, oy + i * self.cell_size)
+            start_v = (ox + i * self.cell_size, oy)
+            end_v = (ox + i * self.cell_size, oy + self.board_size)
+            pygame.draw.line(self.screen, (70, 90, 130), start_h, end_h, 2)
+            pygame.draw.line(self.screen, (70, 90, 130), start_v, end_v, 2)
+
+        axis_color = (180, 190, 210)
+        for idx in range(7):
+            label = self.font_small.render(str(idx), True, axis_color)
+            x_pos = ox + idx * self.cell_size + self.cell_size // 2 - label.get_width() // 2
+            self.screen.blit(label, (x_pos, oy - 30))
+
+        for idx in range(7):
+            label = self.font_small.render(str(idx), True, axis_color)
+            y_pos = oy + idx * self.cell_size + self.cell_size // 2 - label.get_height() // 2
+            self.screen.blit(label, (ox - 30, y_pos))
+
+        board_obj = self.game._state_to_board(self.board)
+        for x in range(7):
+            for y in range(7):
+                owner, piece_type, orientation = board_obj._get_piece(x, y)
+                if piece_type == Board.EMPTY:
+                    continue
+                color = (0, 120, 255) if owner == 1 else (220, 65, 65)
+                if owner not in (1, -1):
+                    color = (220, 220, 220)
+                piece_char = self.get_piece_char(piece_type, owner)
+                label = self.font_large.render(piece_char, True, color)
+                center = (
+                    ox + y * self.cell_size + self.cell_size // 2 - label.get_width() // 2,
+                    oy + x * self.cell_size + self.cell_size // 2 - label.get_height() // 2,
+                )
+                self.screen.blit(label, center)
+
+                if piece_type != Board.PRIEST and orientation is not None:
+                    self.draw_orientation_indicator(x, y, orientation, color)
+
+        if self.selected_piece:
+            sx, sy = self.selected_piece
+            rect = pygame.Rect(
+                ox + sy * self.cell_size,
+                oy + sx * self.cell_size,
+                self.cell_size,
+                self.cell_size,
+            )
+            pygame.draw.rect(self.screen, (255, 210, 0), rect, 4)
+
+    def _draw_panel(self):
+        panel_x = self.board_origin[0] + self.board_size + 30
+        panel_width = self.width - panel_x - 30
+        panel_rect = pygame.Rect(panel_x, 30, panel_width, self.height - 60)
+        pygame.draw.rect(self.screen, (20, 28, 54), panel_rect, 0, border_radius=10)
+        pygame.draw.rect(self.screen, (50, 70, 120), panel_rect, 2, border_radius=10)
+
+        status_label = self.font_medium.render(self.status_text, True, (235, 240, 255))
+        self.screen.blit(status_label, (panel_x + 16, 32))
+
+        for button in self.buttons:
+            button.draw(self.screen, self.font_small)
+
+        instructions_y = self.buttons[-1].rect.bottom + 30
+        title = self.font_medium.render("Instructions", True, (210, 220, 240))
+        self.screen.blit(title, (panel_x + 16, instructions_y))
+        instructions_y += 32
+
+        for line in self.wrap_text(self.instructions, 48):
+            label = self.font_small.render(line, True, (200, 205, 220))
+            self.screen.blit(label, (panel_x + 16, instructions_y))
+            instructions_y += 22
+
+        history_y = instructions_y + 24
+        history_title = self.font_medium.render("History", True, (210, 220, 240))
+        self.screen.blit(history_title, (panel_x + 16, history_y))
+        history_y += 32
+        for line in self._get_history_lines(max_chars=48):
+            label = self.font_small.render(line, True, (190, 200, 215))
+            self.screen.blit(label, (panel_x + 16, history_y))
+            history_y += 20
+
+    def wrap_text(self, text, width):
+        return textwrap.wrap(text.replace("\n", " "), width=width)
+
+    def _get_history_lines(self, max_chars):
+        lines = []
+        for entry in self.history[-self.max_history :]:
+            wrapped = self.wrap_text(entry, max_chars)
+            if not wrapped:
+                continue
+            lines.extend(wrapped)
+        return lines[-self.max_history :]
+
+    def handle_board_click(self, pos):
         if self.game_over:
             return
-        pos = event.pos()
-        x = (pos.y() - 40) // self.board_widget.cell_size
-        y = (pos.x() - 40) // self.board_widget.cell_size
-        if 0 <= x < 7 and 0 <= y < 7:
-            self.handle_cell_click(x, y)
+        coords = self.pos_to_coord(pos)
+        if coords:
+            self.handle_cell_click(*coords)
+
+    def pos_to_coord(self, pos):
+        px, py = pos
+        ox, oy = self.board_origin
+        if ox <= px < ox + self.board_size and oy <= py < oy + self.board_size:
+            x = (py - oy) // self.cell_size
+            y = (px - ox) // self.cell_size
+            return int(x), int(y)
+        return None
 
     def handle_cell_click(self, x, y):
+        board_obj = self.game._state_to_board(self.board)
+        owner, piece_type, _ = board_obj._get_piece(x, y)
         if self.selected_piece is None:
-            owner, piece_type, _ = self.game._state_to_board(self.board)._get_piece(x, y)
             if owner == self.current_player and piece_type != Board.EMPTY:
                 self.selected_piece = (x, y)
-                self.status_label.setText(f"Selected piece at ({x},{y}). Click destination.")
-                self.update_board()
+                self.status_text = f"Selected ({x},{y}). Choose destination"
         else:
             from_x, from_y = self.selected_piece
-            from_idx = from_x * 7 + from_y
-            to_idx = x * 7 + y
-            move_idx = from_idx * 49 + to_idx
+            move_idx = self.coords_to_move_idx(from_x, from_y, x, y)
             valids = self.game.getValidMoves(self.board, self.current_player)
             if valids[move_idx]:
                 self.make_move(move_idx, self.current_player)
             else:
-                self.status_label.setText("Invalid move! Select a different destination")
+                self.status_text = "Invalid move. Select again"
                 self.selected_piece = None
-                self.update_board()
+
+    def coords_to_move_idx(self, from_x, from_y, to_x, to_y):
+        from_idx = from_x * 7 + from_y
+        to_idx = to_x * 7 + to_y
+        return from_idx * 49 + to_idx
 
     def make_move(self, move_idx, acting_player):
         self.board, self.current_player = self.game.getNextState(self.board, acting_player, move_idx)
         from_idx = move_idx // 49
         to_idx = move_idx % 49
-        from_x, from_y = from_idx // 7, from_idx % 7
-        to_x, to_y = to_idx // 7, to_idx % 7
-        move_text = f"Player {acting_player} moved from ({from_x},{from_y}) to ({to_x},{to_y})\n"
-        self.history_text.append(move_text)
+        from_x, from_y = divmod(from_idx, 7)
+        to_x, to_y = divmod(to_idx, 7)
+        self.add_history_entry(f"P{acting_player}: ({from_x},{from_y}) → ({to_x},{to_y})")
         self.selected_piece = None
-        self.update_board()
+
         winner = self.game.getGameEnded(self.board, self.current_player)
         if winner != 0:
             self.game_over = True
-            winner_text = "Player -1" if winner == 1 else "Player 1" if winner == -1 else "Draw"
-            self.status_label.setText(f"Game Over! Winner: {winner_text}")
-            QMessageBox.information(self, "Game Over", f"Winner: {winner_text}")
+            if winner == 1:
+                winner_text = "Player -1"
+            elif winner == -1:
+                winner_text = "Player 1"
+            else:
+                winner_text = "Draw"
+            self.status_text = f"Game over. Winner: {winner_text}"
+            self.add_history_entry(f"Result: {winner_text}")
         else:
-            self.status_label.setText(f"Player {self.current_player}'s turn")
+            self.status_text = f"Player {self.current_player}'s turn"
             self.check_ai_move()
 
     def check_ai_move(self):
-        if self.ai_player and self.current_player == -1:
-            QTimer.singleShot(500, self.make_ai_move)
+        if self.ai_player and self.current_player == -1 and self.pending_ai_move_time is None:
+            self.pending_ai_move_time = pygame.time.get_ticks() + 500
 
     def make_ai_move(self):
         if not self.ai_player:
@@ -229,49 +338,84 @@ Instructians:\n1. Click 'New Game' to start\n2. Choose 'Play vs Human' or 'Play 
         action = self.ai_player.play(self.board, acting_player)
         self.make_move(action, acting_player)
 
+    def add_history_entry(self, text):
+        self.history.append(text)
+        if len(self.history) > self.max_history * 2:
+            self.history = self.history[-self.max_history :]
+
     def new_game(self):
         self.board = self.game.getInitBoard()
         self.current_player = 1
         self.selected_piece = None
         self.game_over = False
         self.ai_player = None
-        self.status_label.setText("Select game mode")
-        self.history_text.clear()
-        self.update_board()
+        self.pending_ai_move_time = None
+        self.status_text = "Select game mode"
+        self.history.clear()
 
     def setup_vs_human(self):
         self.ai_player = None
-        self.status_label.setText("Player 1's turn (Human vs Human)")
+        self.pending_ai_move_time = None
+        self.status_text = "Player 1's turn (Human vs Human)"
+        self.add_history_entry("Mode: Human vs Human")
+
+    def setup_vs_random(self):
+        self.ai_player = GUIRandomPlayer(self.game)
+        self.pending_ai_move_time = None
+        self.status_text = "Player 1's turn (Human vs Random)"
+        self.add_history_entry("Random opponent ready.")
 
     def setup_vs_ai(self):
         try:
             nnet = NNetWrapper(self.game)
-            nnet.load_checkpoint('./temp/', 'best')
-            args = dotdict({'numMCTSSims': 25, 'cpuct': 1})
+            nnet.load_checkpoint("./temp/", "best")
+            args = dotdict({"numMCTSSims": 25, "cpuct": 1})
             self.mcts = MCTS(self.game, nnet, args)
             self.ai_player = AIPlayer(self.game, self.mcts)
-            self.status_label.setText("Player 1's turn (Human vs AI)")
-            QMessageBox.information(self, "Success", "Loaded best AI model from ./temp/best")
-        except Exception as e:
+            self.pending_ai_move_time = None
+            self.status_text = "Player 1's turn (Human vs AI)"
+            self.add_history_entry("Loaded best AI from ./temp/best")
+        except Exception as exc:
             self.ai_player = None
-            QMessageBox.critical(self, "Error", f"Failed to load AI model: {str(e)}")
+            self.mcts = None
+            self.status_text = "AI load failed. Check console."
+            self.add_history_entry(f"AI error: {exc}")
 
-    def setup_vs_random(self):
-        self.ai_player = GUIRandomPlayer(self.game)
-        self.status_label.setText("Player 1's turn (Human vs Random)")
-        self.history_text.append("Random opponent ready.\n")
-        
+    def get_piece_char(self, piece_type, owner):
+        if piece_type == Board.PRIEST:
+            return "P"
+        if piece_type == Board.CHURCH_TOWER:
+            return "T" if owner == 1 else "t"
+        if piece_type == Board.CHURCH_SHIP:
+            return "S" if owner == 1 else "s"
+        if piece_type == Board.HOUSE:
+            return "H" if owner == 1 else "h"
+        return "?"
+
+    def draw_orientation_indicator(self, x, y, orientation, color):
+        ox, oy = self.board_origin
+        center_x = ox + y * self.cell_size + self.cell_size // 2
+        center_y = oy + x * self.cell_size + self.cell_size // 2
+        if orientation == Board.VERTICAL:
+            pygame.draw.line(self.screen, color, (center_x - 15, center_y + 20), (center_x + 15, center_y + 20), 3)
+        elif orientation == Board.HORIZONTAL:
+            pygame.draw.line(self.screen, color, (center_x + 20, center_y - 15), (center_x + 20, center_y + 15), 3)
+
+
 class AIPlayer:
     def __init__(self, game, mcts):
         self.game = game
         self.mcts = mcts
-    def play(self, board):
+
+    def play(self, board, player=-1):
         probs = self.mcts.getActionProb(board, temp=0)
-        action = np.argmax(probs)
-        return action
+        return int(np.argmax(probs))
 
 
 class GUIRandomPlayer(RandomPlayer):
+    def __init__(self, game):
+        super().__init__(game)
+
     def play(self, board, player=-1):
         valids = self.game.getValidMoves(board, player)
         candidates = np.where(valids)[0]
@@ -279,11 +423,11 @@ class GUIRandomPlayer(RandomPlayer):
             return 0
         return int(np.random.choice(candidates))
 
+
 def main():
-    app = QApplication(sys.argv)
-    window = LKIDFrontend()
-    window.show()
-    sys.exit(app.exec_())
+    frontend = LKIDPygameFrontend()
+    frontend.run()
+
 
 if __name__ == "__main__":
     main()
