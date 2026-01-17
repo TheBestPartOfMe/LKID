@@ -1,14 +1,21 @@
 """
 Board class for the game of Lass Die Kirche Im Dorf (LKID).
-5x5 board with pieces that have orientation (horizontal/vertical).
+
+The board can be configured to any square size (default 7x7) and supports
+special barrier cells in addition to the regular LKID pieces. Each cell stores
+owner, piece type, and orientation information.
 
 Board representation:
 - Each cell contains: (owner, piece_type, orientation)
-  - owner: 0=empty, 1=P1, -1=P2
-  - piece_type: 0=empty, 1=church_tower, 2=church_ship, 3=house, 4=priest
-  - orientation: 0=horizontal, 1=vertical
-- Priest (owner=0, piece_type=4) has no orientation
-
+    - owner: 0=neutral/empty, 1=P1, -1=P2
+    - piece_type:
+                0 = empty
+                1 = church tower
+                2 = church ship
+                3 = house
+                4 = priest
+                5 = barrier (immovable, ownerless)
+    - orientation: 0=horizontal, 1=vertical (None for priest/barrier)
 """
 import numpy as np
 from itertools import product
@@ -23,14 +30,16 @@ class Board:
     CHURCH_SHIP = 2
     HOUSE = 3
     PRIEST = 4
+    BARRIER = 5
 
     # Orientations
     HORIZONTAL = 0
     VERTICAL = 1
 
-    def __init__(self):
-        """Initialize the board with setup configuration."""
-        self.n = 7
+    def __init__(self, n=7, barriers=None):
+        """Initialize the board and optionally seed barrier positions."""
+        self.n = n
+        self.barriers = set(barriers or [])
         # Board state: array of tuples (owner, piece_type, orientation)
         # owner: 1 for P1, -1 for P2, 0 for neutral/empty
         self.board = np.empty((self.n, self.n), dtype=object)
@@ -41,14 +50,32 @@ class Board:
         for i in range(self.n):
             for j in range(self.n):
                 self.board[i][j] = (0, self.EMPTY, None)
+        self._place_barriers()
+
+    def _place_barriers(self):
+        """Mark configured barrier cells as immovable obstacles."""
+        for bx, by in self.barriers:
+            if self._is_in_bounds(bx, by):
+                self.board[bx][by] = (0, self.BARRIER, None)
 
     def _set_piece(self, x, y, owner, piece_type, orientation=None):
         """Set a piece at position (x, y)."""
+        if not self._is_in_bounds(x, y):
+            raise ValueError(f"Position {(x, y)} outside board bounds")
+        if self._is_barrier(x, y) and piece_type != self.BARRIER:
+            raise ValueError(f"Cannot place piece on barrier cell {(x, y)}")
         self.board[x][y] = (owner, piece_type, orientation)
 
     def _get_piece(self, x, y):
         """Get the piece at position (x, y)."""
         return self.board[x][y]
+
+    def _is_barrier(self, x, y):
+        """Check if the cell holds a barrier."""
+        if not self._is_in_bounds(x, y):
+            return False
+        _, piece_type, _ = self._get_piece(x, y)
+        return piece_type == self.BARRIER
 
     def _is_in_bounds(self, x, y):
         """Check if position is within board bounds."""
@@ -263,6 +290,6 @@ class Board:
 
     def __copy__(self):
         """Create a deep copy of the board."""
-        new_board = Board()
+        new_board = Board(self.n, self.barriers)
         new_board.board = np.copy(self.board)
         return new_board
