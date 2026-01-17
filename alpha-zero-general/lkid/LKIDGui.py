@@ -30,6 +30,8 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
 from lkid.LKIDGame import LKIDGame
+from lkid.LKIDGame5x5 import LKIDGame as LKIDGame5x5
+from lkid.LKIDGame5x5Barriers import LKIDGame5x5Barriers
 from lkid.LKIDLogic import Board
 from lkid.keras.NNet import NNetWrapper
 from lkid.LKIDPlayers import RandomPlayer
@@ -45,6 +47,9 @@ class UIButton:
         self.text = text
         self.callback = callback
         self.hover = False
+
+    def set_text(self, text):
+        self.text = text
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEMOTION:
@@ -76,10 +81,18 @@ class LKIDPygameFrontend:
 
         self.board_origin = (40, 40)
         self.cell_size = 70
-        self.board_size = self.cell_size * 7
+        self.max_board_size = self.cell_size * 7
 
-        self.game = LKIDGame()
+        self.game_variants = [
+            ("Classic 7x7", LKIDGame),
+            ("Classic 5x5", LKIDGame5x5),
+            ("5x5 + Barriers", LKIDGame5x5Barriers),
+        ]
+        self.variant_index = 0
+        self.game_class = self.game_variants[self.variant_index][1]
+        self.game = self.game_class()
         self.board = self.game.getInitBoard()
+        self._update_board_metrics()
         self.current_player = 1
         self.selected_piece = None
         self.game_over = False
@@ -88,29 +101,28 @@ class LKIDPygameFrontend:
         self.pending_ai_move_time = None
 
         self.history = []
-        self.max_history = 8
-        self.status_text = "Select game mode"
+        self.max_history = 4
+        self.status_text = f"{self.current_variant_name}: Select game mode"
 
         self.font_small = pygame.font.SysFont("arial", 18)
         self.font_medium = pygame.font.SysFont("arial", 22)
         self.font_large = pygame.font.SysFont("arial", 28, bold=True)
 
         self.instructions = (
-            "Instructions:\n"
-            "1. Click 'New Game'\n"
-            "2. Pick Human, Random, or AI\n"
-            "3. Click a piece, then a destination\n"
-            "Goal: Connect all houses to the church\n"
-            "T/t=Tower, S/s=Ship, H/h=House, P=Priest\n"
-            "Blue=Player 1, Red=Player 2\n"
-            "- horizontal, | vertical"
+            "1. Use 'Variant' to switch board types\n"
+            "2. Click 'New Game' then pick an opponent\n"
+            "3. Select your piece, then its destination\n"
+            "Goal: Connect every house to your church\n"
+            "Blue=P1, Red=P2; '-' horizontal, '|' vertical\n"
+            "Barrier tiles (if present) block movement"
         )
 
         self.buttons = []
+        self.variant_button = None
         self._create_buttons()
 
     def _create_buttons(self):
-        panel_x = self.board_origin[0] + self.board_size + 40
+        panel_x = self._panel_origin_x()
         btn_width = 360
         btn_height = 48
         spacing = 16
@@ -118,12 +130,47 @@ class LKIDPygameFrontend:
 
         def add_button(label, callback):
             rect = (panel_x, top + len(self.buttons) * (btn_height + spacing), btn_width, btn_height)
-            self.buttons.append(UIButton(rect, label, callback))
+            button = UIButton(rect, label, callback)
+            self.buttons.append(button)
+            return button
 
+        self.variant_button = add_button(self._variant_button_label(), self.cycle_variant)
         add_button("New Game", self.new_game)
         add_button("Play vs Human", self.setup_vs_human)
         add_button("Play vs Random", self.setup_vs_random)
         add_button("Play vs AI (best)", self.setup_vs_ai)
+
+    def _panel_origin_x(self):
+        return self.board_origin[0] + self.max_board_size + 40
+
+    @property
+    def current_variant_name(self):
+        return self.game_variants[self.variant_index][0]
+
+    def _variant_button_label(self):
+        return f"Variant: {self.current_variant_name}"
+
+    def _update_board_metrics(self):
+        self.board_size = self.cell_size * self.game.n
+
+    def cycle_variant(self):
+        self.variant_index = (self.variant_index + 1) % len(self.game_variants)
+        self.game_class = self.game_variants[self.variant_index][1]
+        self.game = self.game_class()
+        self.board = self.game.getInitBoard()
+        self._update_board_metrics()
+        self.current_player = 1
+        self.selected_piece = None
+        self.game_over = False
+        self.ai_player = None
+        self.mcts = None
+        self.pending_ai_move_time = None
+        self.history.clear()
+        variant_name = self.current_variant_name
+        self.status_text = f"{variant_name}: Select game mode"
+        self.add_history_entry(f"Variant changed to {variant_name}")
+        if self.variant_button:
+            self.variant_button.set_text(self._variant_button_label())
 
     def run(self):
         running = True
@@ -167,35 +214,48 @@ class LKIDPygameFrontend:
         self._draw_panel()
 
     def _draw_board(self):
+        size = self.game.n
         ox, oy = self.board_origin
+        board_px = self.board_size
         pygame.draw.rect(
-            self.screen, (24, 30, 52), (ox - 10, oy - 10, self.board_size + 20, self.board_size + 20), 0, border_radius=8
+            self.screen, (24, 30, 52), (ox - 10, oy - 10, board_px + 20, board_px + 20), 0, border_radius=8
         )
 
-        for i in range(8):
+        for i in range(size + 1):
             start_h = (ox, oy + i * self.cell_size)
-            end_h = (ox + self.board_size, oy + i * self.cell_size)
+            end_h = (ox + board_px, oy + i * self.cell_size)
             start_v = (ox + i * self.cell_size, oy)
-            end_v = (ox + i * self.cell_size, oy + self.board_size)
+            end_v = (ox + i * self.cell_size, oy + board_px)
             pygame.draw.line(self.screen, (70, 90, 130), start_h, end_h, 2)
             pygame.draw.line(self.screen, (70, 90, 130), start_v, end_v, 2)
 
         axis_color = (180, 190, 210)
-        for idx in range(7):
+        for idx in range(size):
             label = self.font_small.render(str(idx), True, axis_color)
             x_pos = ox + idx * self.cell_size + self.cell_size // 2 - label.get_width() // 2
             self.screen.blit(label, (x_pos, oy - 30))
 
-        for idx in range(7):
+        for idx in range(size):
             label = self.font_small.render(str(idx), True, axis_color)
             y_pos = oy + idx * self.cell_size + self.cell_size // 2 - label.get_height() // 2
             self.screen.blit(label, (ox - 30, y_pos))
 
         board_obj = self.game._state_to_board(self.board)
-        for x in range(7):
-            for y in range(7):
+        for x in range(size):
+            for y in range(size):
                 owner, piece_type, orientation = board_obj._get_piece(x, y)
                 if piece_type == Board.EMPTY:
+                    continue
+                if piece_type == Board.BARRIER:
+                    rect = pygame.Rect(
+                        ox + y * self.cell_size + 6,
+                        oy + x * self.cell_size + 6,
+                        self.cell_size - 12,
+                        self.cell_size - 12,
+                    )
+                    pygame.draw.rect(self.screen, (80, 90, 120), rect, border_radius=6)
+                    pygame.draw.line(self.screen, (25, 30, 45), rect.topleft, rect.bottomright, 3)
+                    pygame.draw.line(self.screen, (25, 30, 45), rect.topright, rect.bottomleft, 3)
                     continue
                 color = (0, 120, 255) if owner == 1 else (220, 65, 65)
                 if owner not in (1, -1):
@@ -208,7 +268,7 @@ class LKIDPygameFrontend:
                 )
                 self.screen.blit(label, center)
 
-                if piece_type != Board.PRIEST and orientation is not None:
+                if piece_type not in (Board.PRIEST, Board.BARRIER) and orientation is not None:
                     self.draw_orientation_indicator(x, y, orientation, color)
 
         if self.selected_piece:
@@ -222,7 +282,7 @@ class LKIDPygameFrontend:
             pygame.draw.rect(self.screen, (255, 210, 0), rect, 4)
 
     def _draw_panel(self):
-        panel_x = self.board_origin[0] + self.board_size + 30
+        panel_x = self._panel_origin_x()
         panel_width = self.width - panel_x - 30
         panel_rect = pygame.Rect(panel_x, 30, panel_width, self.height - 60)
         pygame.draw.rect(self.screen, (20, 28, 54), panel_rect, 0, border_radius=10)
@@ -299,16 +359,20 @@ class LKIDPygameFrontend:
                 self.selected_piece = None
 
     def coords_to_move_idx(self, from_x, from_y, to_x, to_y):
-        from_idx = from_x * 7 + from_y
-        to_idx = to_x * 7 + to_y
-        return from_idx * 49 + to_idx
+        side = self.game.n
+        board_area = side * side
+        from_idx = from_x * side + from_y
+        to_idx = to_x * side + to_y
+        return from_idx * board_area + to_idx
 
     def make_move(self, move_idx, acting_player):
         self.board, self.current_player = self.game.getNextState(self.board, acting_player, move_idx)
-        from_idx = move_idx // 49
-        to_idx = move_idx % 49
-        from_x, from_y = divmod(from_idx, 7)
-        to_x, to_y = divmod(to_idx, 7)
+        side = self.game.n
+        board_area = side * side
+        from_idx = move_idx // board_area
+        to_idx = move_idx % board_area
+        from_x, from_y = divmod(from_idx, side)
+        to_x, to_y = divmod(to_idx, side)
         self.add_history_entry(f"P{acting_player}: ({from_x},{from_y}) → ({to_x},{to_y})")
         self.selected_piece = None
 
@@ -350,7 +414,7 @@ class LKIDPygameFrontend:
         self.game_over = False
         self.ai_player = None
         self.pending_ai_move_time = None
-        self.status_text = "Select game mode"
+        self.status_text = f"{self.current_variant_name}: Select game mode"
         self.history.clear()
 
     def setup_vs_human(self):

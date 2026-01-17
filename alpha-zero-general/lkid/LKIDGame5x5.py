@@ -28,6 +28,7 @@ class LKIDGame(Game):
         self.n = 5
         self.board_size = self.n * self.n
         self.action_space_size = self.board_size * self.board_size
+        self.barriers = None
 
     def getInitBoard(self):
         """
@@ -41,7 +42,7 @@ class LKIDGame(Game):
     def _create_initial_board(self):
         """Create and return the initial board configuration with random start positions."""
         import random
-        board = Board()
+        board = Board(n=self.n, barriers=self.barriers)
 
         # List of (p1_state, p2_state, priest_pos) tuples
         start_positions = [
@@ -51,9 +52,8 @@ class LKIDGame(Game):
                 (1, 1, Board.HOUSE, Board.HORIZONTAL),
                 (3, 1, Board.HOUSE, Board.VERTICAL),
             ],
-             [ (4, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
-                (0, 4, Board.CHURCH_SHIP, Board.HORIZONTAL),
-                (1, 0, Board.HOUSE, Board.HORIZONTAL),
+                 [ (4, 0, Board.CHURCH_TOWER, Board.HORIZONTAL),
+                     (1, 0, Board.HOUSE, Board.HORIZONTAL),
                 (3, 0, Board.HOUSE, Board.VERTICAL),
             ],
              (2, 2)),
@@ -161,7 +161,7 @@ class LKIDGame(Game):
 
     def _state_to_board(self, state):
         """Convert numpy array state to Board object."""
-        board = Board()
+        board = Board(n=self.n, barriers=self.barriers)
         board._init_empty_board()
         
         for x in range(self.n):
@@ -171,7 +171,9 @@ class LKIDGame(Game):
                 
                 owner_encoded = (value >> 4) & 0x3
                 piece_type = (value >> 1) & 0x7
-                orientation = value & 0x1 if piece_type != Board.EMPTY and piece_type != Board.PRIEST else None
+                orientation = (
+                    value & 0x1 if piece_type not in (Board.EMPTY, Board.PRIEST, Board.BARRIER) else None
+                )
                 
                 owner = 0 if owner_encoded == 0 else (1 if owner_encoded == 1 else -1)
                 
